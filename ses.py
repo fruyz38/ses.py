@@ -6,7 +6,6 @@ import requests
 from flask import Flask
 from threading import Thread
 
-# Log seviyesini ayarla
 logging.basicConfig(level=logging.INFO)
 
 import discord
@@ -14,15 +13,17 @@ import discord.state
 import discord.settings
 import discord.utils
 
-# --- 1. BUILD NUMBER & BROWSER VERSION YAMASI (ASYNC DÜZELTMESİ) ---
-# Kütüphane bu fonksiyonları 'await' ettiği için hepsi async olmak zorunda!
+# ==================== KULLANICI AYARLARI ====================
+CHANNEL_ID = 1533212315355316227
+# ============================================================
+
+# --- 1. BUILD NUMBER & BROWSER VERSION YAMASI ---
 async def fake_async_build_number(*args, **kwargs):
     return 315682
 
 async def fake_async_browser_version(*args, **kwargs):
     return "128.0.0.0"
 
-# Tüm versiyon kontrol metodlarını async sahte fonksiyonla eziyoruz
 discord.utils.get_build_number = fake_async_build_number
 discord.utils.get_browser_version = fake_async_browser_version
 
@@ -31,7 +32,7 @@ if hasattr(discord.utils, '_get_build_number'):
 if hasattr(discord.utils, '_get_browser_version'):
     discord.utils._get_browser_version = fake_async_browser_version
 
-# --- 2. GATEWAY READY/SUPPLEMENTAL ÇÖKMESİNİ ENGELEYEN YAMA ---
+# --- 2. GATEWAY READY YAMASI ---
 async def dummy_parse_ready_supp(self, data):
     pass
 
@@ -48,9 +49,8 @@ def safe_settings_init(self, data, state):
     old_settings_init(self, data, state)
 
 discord.settings.Settings.__init__ = safe_settings_init
-# -----------------------------------------------------------------
+# -------------------------------------------------------------
 
-# 3. Web Sunucusu (Render Port Kapanmasını Önler)
 app = Flask('')
 
 @app.route('/')
@@ -61,7 +61,6 @@ def run_flask():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-# 4. Self-Ping (Render Uykusunu Engeller)
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -72,18 +71,10 @@ def self_ping_loop():
             except Exception:
                 pass
 
-# 5. Discord Self-Bot Mantığı
 TOKEN = os.environ.get("TOKEN")
-CHANNEL_ID_RAW = os.environ.get("CHANNEL_ID", "0")
-
-try:
-    CHANNEL_ID = int(CHANNEL_ID_RAW)
-except ValueError:
-    CHANNEL_ID = 0
 
 client = discord.Client(self_bot=True)
 
-# Mesaj dinlemeyi kapat
 async def on_message(message):
     pass
 client.on_message = on_message
@@ -96,19 +87,26 @@ async def voice_loop():
     
     while not client.is_closed():
         try:
+            # Önce önbellekten dene, bulamazsa Discord API'den zorla çek (fetch)
             channel = client.get_channel(CHANNEL_ID)
+            if not channel:
+                try:
+                    channel = await client.fetch_channel(CHANNEL_ID)
+                except Exception as fetch_err:
+                    print(f"Kanal fetch edilemedi: {fetch_err}", flush=True)
+
             if channel:
                 if not client.voice_clients:
                     print(f"Sese baglaniliyor: {channel.name} (ID: {CHANNEL_ID})", flush=True)
                     await channel.connect(self_deaf=True, self_mute=True)
-                    print("SESE BAŞARIYLA GİRİLDİ!", flush=True)
+                    print(">>> SESE BAŞARIYLA GİRİLDİ! <<<", flush=True)
                 else:
                     vc = client.voice_clients[0]
                     if vc.channel.id != CHANNEL_ID:
                         print("Farkli kanalda, hedefe tasiniyor...", flush=True)
                         await vc.move_to(channel)
             else:
-                print(f"HATA: CHANNEL_ID ({CHANNEL_ID}) bulunamadi veya kanala erisim yetkisi yok!", flush=True)
+                print(f"HATA: CHANNEL_ID ({CHANNEL_ID}) bulunamadi! Hesabın bu kanala erişimi/yetkisi olduğundan emin ol.", flush=True)
         except Exception as e:
             print(f"Ses baglanti hatasi: {e}", flush=True)
             
@@ -131,7 +129,7 @@ if __name__ == "__main__":
     t_ping.start()
 
     if not TOKEN:
-        print("KRİTİK HATA: Render vars kısmında TOKEN bulunamadı!", flush=True)
+        print("KRİTİK HATA: Render variables kısmında TOKEN bulunamadı!", flush=True)
     else:
         print("Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
         client.run(TOKEN, reconnect=True)
