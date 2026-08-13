@@ -1,22 +1,28 @@
 import os
 import time
 import asyncio
-import requests
 import logging
+import requests
 from flask import Flask
 from threading import Thread
 
-# Discord'un TÜM gizli loglarını ve hatalarını ekrana dökmesini sağlıyoruz
+# Discord'un ayrıntılı loglarını görmek için
 logging.basicConfig(level=logging.INFO)
 
-# --- DISCORD READY/SETTINGS YAMASI ---
+import discord
 import discord.state
 import discord.settings
+
+# --- GATWAY READY/SUPPLEMENTAL ÇÖKMESİNİ ENGELEYEN KRİTİK YAMA ---
+async def dummy_parse_ready_supp(self, data):
+    pass
 
 def noop_parse_ready_supp(self, data):
     pass
 
+# Kütüphanenin çökmesine yol açan hazır paket ayrıştırmalarını tamamen devre dışı bırakıyoruz
 discord.state.ConnectionState.parse_ready_supplemental = noop_parse_ready_supp
+discord.state.ConnectionState._parse_ready_supplemental = dummy_parse_ready_supp
 
 old_settings_init = discord.settings.Settings.__init__
 def safe_settings_init(self, data, state):
@@ -25,22 +31,20 @@ def safe_settings_init(self, data, state):
     old_settings_init(self, data, state)
 
 discord.settings.Settings.__init__ = safe_settings_init
-# -------------------------------------
+# -----------------------------------------------------------------
 
-import discord
-
-# 1. Web Sunucusu
+# 1. Web Sunucusu (Render'ın Port Kapanma Hatasını Önler)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Web Sunucusu Aktif"
+    return "Bot ve Web Sunucusu Aktif!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-# 2. Self Ping
+# 2. Self-Ping (Render Uykusunu Engeller)
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -48,10 +52,10 @@ def self_ping_loop():
             try:
                 time.sleep(240)
                 requests.get(url)
-            except:
+            except Exception:
                 pass
 
-# 3. İstemci Tanımlama
+# 3. Discord Self-Bot Mantığı
 TOKEN = os.environ.get("TOKEN")
 CHANNEL_ID_RAW = os.environ.get("CHANNEL_ID", "0")
 
@@ -62,7 +66,7 @@ except ValueError:
 
 client = discord.Client(self_bot=True)
 
-# Mesaj dinlemeyi tamamen kapatıyoruz
+# Mesaj dinlemeyi tamamen kapatıyoruz ki çökme olmasın
 async def on_message(message):
     pass
 client.on_message = on_message
@@ -91,17 +95,17 @@ async def voice_loop():
         except Exception as e:
             print(f"Ses baglanti hatasi: {e}", flush=True)
             
-        await asyncio.sleep(20)
+        await asyncio.sleep(15)
 
 @client.event
 async def on_ready():
-    print("Discord baglantisi kuruldu, ses dongusu baslatiliyor...", flush=True)
+    print("Discord baglantisi kuruldu, ses döngüsü baslatiliyor...", flush=True)
     client.loop.create_task(voice_loop())
 
 if __name__ == "__main__":
     print("=== SİSTEM BAŞLATILIYOR ===", flush=True)
     
-    # Web sunucusunu arka planda çalıştır
+    # Flask sunucusunu arka planda çalıştır
     t_flask = Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
@@ -114,8 +118,5 @@ if __name__ == "__main__":
     if not TOKEN:
         print("KRİTİK HATA: Render Environment Variables kısmında TOKEN bulunamadı!", flush=True)
     else:
-        print(f"Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
-        try:
-            client.run(TOKEN, reconnect=True)
-        except Exception as e:
-            print(f"DISCORD BAGLANTI HATASI: {e}", flush=True)
+        print("Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
+        client.run(TOKEN, reconnect=True)
