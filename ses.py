@@ -14,27 +14,22 @@ import discord.state
 import discord.settings
 import discord.utils
 
-# --- 1. BUILD NUMBER & BROWSER VERSION YAMASI (KİLİT NOKTA) ---
-# Render IP'sinden versiyon çekilemediği için sabit değerler tanımlıyoruz
-async def fake_build_number(*args, **kwargs):
+# --- 1. BUILD NUMBER & BROWSER VERSION YAMASI (ASYNC DÜZELTMESİ) ---
+# Kütüphane bu fonksiyonları 'await' ettiği için hepsi async olmak zorunda!
+async def fake_async_build_number(*args, **kwargs):
     return 315682
 
-async def fake_browser_version(*args, **kwargs):
+async def fake_async_browser_version(*args, **kwargs):
     return "128.0.0.0"
 
-def fake_sync_build_number(*args, **kwargs):
-    return 315682
+# Tüm versiyon kontrol metodlarını async sahte fonksiyonla eziyoruz
+discord.utils.get_build_number = fake_async_build_number
+discord.utils.get_browser_version = fake_async_browser_version
 
-def fake_sync_browser_version(*args, **kwargs):
-    return "128.0.0.0"
-
-# Kütüphanenin çöken utils fonksiyonlarını eziyoruz
-discord.utils.get_build_number = fake_build_number
-discord.utils.get_browser_version = fake_browser_version
 if hasattr(discord.utils, '_get_build_number'):
-    discord.utils._get_build_number = fake_sync_build_number
+    discord.utils._get_build_number = fake_async_build_number
 if hasattr(discord.utils, '_get_browser_version'):
-    discord.utils._get_browser_version = fake_sync_browser_version
+    discord.utils._get_browser_version = fake_async_browser_version
 
 # --- 2. GATEWAY READY/SUPPLEMENTAL ÇÖKMESİNİ ENGELEYEN YAMA ---
 async def dummy_parse_ready_supp(self, data):
