@@ -13,10 +13,6 @@ import discord.state
 import discord.settings
 import discord.utils
 
-# ==================== KULLANICI AYARLARI ====================
-CHANNEL_ID = 1533212315355316227
-# ============================================================
-
 # --- 1. BUILD NUMBER & BROWSER VERSION YAMASI ---
 async def fake_async_build_number(*args, **kwargs):
     return 315682
@@ -55,7 +51,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot Aktif!"
+    return "Bot 24/7 Aktif!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 8080))
@@ -71,7 +67,9 @@ def self_ping_loop():
             except Exception:
                 pass
 
+# Değişkenleri Render Gizli Kasasından Okuyoruz
 TOKEN = os.environ.get("TOKEN")
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "1533212315355316227"))
 
 client = discord.Client(self_bot=True)
 
@@ -87,26 +85,24 @@ async def voice_loop():
     
     while not client.is_closed():
         try:
-            # Önce önbellekten dene, bulamazsa Discord API'den zorla çek (fetch)
             channel = client.get_channel(CHANNEL_ID)
             if not channel:
                 try:
                     channel = await client.fetch_channel(CHANNEL_ID)
                 except Exception as fetch_err:
-                    print(f"Kanal fetch edilemedi: {fetch_err}", flush=True)
+                    print(f"Kanal bulunamadi: {fetch_err}", flush=True)
 
             if channel:
                 if not client.voice_clients:
-                    print(f"Sese baglaniliyor: {channel.name} (ID: {CHANNEL_ID})", flush=True)
+                    print(f"Sese baglaniliyor: {channel.name}", flush=True)
                     await channel.connect(self_deaf=True, self_mute=True)
-                    print(">>> SESE BAŞARIYLA GİRİLDİ! <<<", flush=True)
+                    print(">>> SESE BAŞARIYLA GİRİLDİ (24/7 AKTİF) <<<", flush=True)
                 else:
                     vc = client.voice_clients[0]
                     if vc.channel.id != CHANNEL_ID:
-                        print("Farkli kanalda, hedefe tasiniyor...", flush=True)
                         await vc.move_to(channel)
             else:
-                print(f"HATA: CHANNEL_ID ({CHANNEL_ID}) bulunamadi! Hesabın bu kanala erişimi/yetkisi olduğundan emin ol.", flush=True)
+                print("Kanal ID eksik veya gecersiz!", flush=True)
         except Exception as e:
             print(f"Ses baglanti hatasi: {e}", flush=True)
             
@@ -118,8 +114,6 @@ async def on_ready():
     client.loop.create_task(voice_loop())
 
 if __name__ == "__main__":
-    print("=== SİSTEM BAŞLATILIYOR ===", flush=True)
-    
     t_flask = Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
@@ -129,7 +123,6 @@ if __name__ == "__main__":
     t_ping.start()
 
     if not TOKEN:
-        print("KRİTİK HATA: Render variables kısmında TOKEN bulunamadı!", flush=True)
+        print("KRİTİK HATA: Render paneline TOKEN eklenmedi!", flush=True)
     else:
-        print("Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
         client.run(TOKEN, reconnect=True)
