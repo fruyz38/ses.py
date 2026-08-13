@@ -2,10 +2,14 @@ import os
 import time
 import asyncio
 import requests
+import logging
 from flask import Flask
 from threading import Thread
 
-# --- DISCORD READY YAMASI ---
+# Discord'un TÜM gizli loglarını ve hatalarını ekrana dökmesini sağlıyoruz
+logging.basicConfig(level=logging.INFO)
+
+# --- DISCORD READY/SETTINGS YAMASI ---
 import discord.state
 import discord.settings
 
@@ -21,7 +25,7 @@ def safe_settings_init(self, data, state):
     old_settings_init(self, data, state)
 
 discord.settings.Settings.__init__ = safe_settings_init
-# ----------------------------
+# -------------------------------------
 
 import discord
 
@@ -30,7 +34,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Aktif"
+    return "Web Sunucusu Aktif"
 
 def run_flask():
     port = int(os.environ.get('PORT', 8080))
@@ -49,33 +53,41 @@ def self_ping_loop():
 
 # 3. İstemci Tanımlama
 TOKEN = os.environ.get("TOKEN")
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
+CHANNEL_ID_RAW = os.environ.get("CHANNEL_ID", "0")
+
+try:
+    CHANNEL_ID = int(CHANNEL_ID_RAW)
+except ValueError:
+    CHANNEL_ID = 0
 
 client = discord.Client(self_bot=True)
 
-# Mesaj dinlemeyi tamamen eziyoruz
+# Mesaj dinlemeyi tamamen kapatıyoruz
 async def on_message(message):
     pass
 client.on_message = on_message
 
 async def voice_loop():
     await client.wait_until_ready()
-    print(f"GIRIS YAPILDI: {client.user}", flush=True)
+    print(f"\n==========================================", flush=True)
+    print(f"GİRİŞ BAŞARILI: {client.user}", flush=True)
+    print(f"==========================================\n", flush=True)
     
     while not client.is_closed():
         try:
             channel = client.get_channel(CHANNEL_ID)
             if channel:
                 if not client.voice_clients:
-                    print(f"Sese baglaniliyor: {channel.name}", flush=True)
+                    print(f"Sese baglaniliyor: {channel.name} (ID: {CHANNEL_ID})", flush=True)
                     await channel.connect(self_deaf=True, self_mute=True)
+                    print("SESE BAŞARIYLA GİRİLDİ!", flush=True)
                 else:
                     vc = client.voice_clients[0]
                     if vc.channel.id != CHANNEL_ID:
                         print("Farkli kanalda, hedefe tasiniyor...", flush=True)
                         await vc.move_to(channel)
             else:
-                print("HATA: CHANNEL_ID bulunamadi veya kanala erişim yetkisi yok!", flush=True)
+                print(f"HATA: CHANNEL_ID ({CHANNEL_ID}) bulunamadi veya kanala erisim yetkisi yok!", flush=True)
         except Exception as e:
             print(f"Ses baglanti hatasi: {e}", flush=True)
             
@@ -83,18 +95,27 @@ async def voice_loop():
 
 @client.event
 async def on_ready():
+    print("Discord baglantisi kuruldu, ses dongusu baslatiliyor...", flush=True)
     client.loop.create_task(voice_loop())
 
 if __name__ == "__main__":
-    # Flask sunucusunu kesinlikle arka planda (Daemon Thread) başlatıyoruz
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+    print("=== SİSTEM BAŞLATILIYOR ===", flush=True)
+    
+    # Web sunucusunu arka planda çalıştır
+    t_flask = Thread(target=run_flask)
+    t_flask.daemon = True
+    t_flask.start()
 
-    # Self-ping thread
+    # Self-ping arka planda çalıştır
     t_ping = Thread(target=self_ping_loop)
     t_ping.daemon = True
     t_ping.start()
 
-    # Ana thread'i tamamen Discord Client'a veriyoruz
-    client.run(TOKEN, reconnect=True)
+    if not TOKEN:
+        print("KRİTİK HATA: Render Environment Variables kısmında TOKEN bulunamadı!", flush=True)
+    else:
+        print(f"Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
+        try:
+            client.run(TOKEN, reconnect=True)
+        except Exception as e:
+            print(f"DISCORD BAGLANTI HATASI: {e}", flush=True)
