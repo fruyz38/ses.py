@@ -5,17 +5,15 @@ import requests
 from flask import Flask
 from threading import Thread
 
-# --- DISCORD READY/SETTINGS SIFIRLAMA YAMASI ---
+# --- READY HATASINI GEÇİREN YAMA ---
 import discord.state
 import discord.settings
 
-# Discord'un bozuk user_settings paketini bypass ediyoruz
 def noop_parse_ready_supp(self, data):
     pass
 
 discord.state.ConnectionState.parse_ready_supplemental = noop_parse_ready_supp
 
-# Settings init hatasını tamamen bypass et
 old_settings_init = discord.settings.Settings.__init__
 def safe_settings_init(self, data, state):
     if not isinstance(data, dict):
@@ -23,17 +21,16 @@ def safe_settings_init(self, data, state):
     old_settings_init(self, data, state)
 
 discord.settings.Settings.__init__ = safe_settings_init
-# -----------------------------------------------
+# -----------------------------------
 
 import discord
-from discord.ext import commands
 
-# 1. Web Sunucusu (Render'ın uyanık kalması için)
+# 1. Web Sunucusu
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot ses kanalında aktif!"
+    return "Aktif"
 
 def run():
     port = int(os.environ.get('PORT', 8080))
@@ -44,7 +41,7 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# 2. Self-Ping (Render uykusunu engeller)
+# 2. Self Ping
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -60,37 +57,46 @@ def start_self_ping():
     t.daemon = True
     t.start()
 
-# 3. Ayarlar ve Bağlantı
+# 3. İstemci Tanımlama (commands.Bot DEĞİL, Saf Client)
 TOKEN = os.environ.get("TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
 
-bot = commands.Bot(command_prefix="!", self_bot=True)
+client = discord.Client(self_bot=True)
 
-async def maintain_voice_connection():
-    await bot.wait_until_ready()
-    while not bot.is_closed():
+# Mesaj dinlemeyi tamamen kapatıyoruz ki o AttributeError hatası imkansız olsun
+async def on_message(message):
+    pass
+client.on_message = on_message
+
+async def voice_loop():
+    await client.wait_until_ready()
+    print(f"GIRIS YAPILDI: {client.user}")
+    
+    while not client.is_closed():
         try:
-            channel = bot.get_channel(CHANNEL_ID)
+            channel = client.get_channel(CHANNEL_ID)
             if channel:
-                # Zaten ses kanalındaysa dokunma, başka kanaldaysa taşı, seste değilse bağlan
-                if bot.voice_clients:
-                    vc = bot.voice_clients[0]
-                    if vc.channel.id != CHANNEL_ID:
-                        await vc.move_to(channel)
-                else:
+                # Zaten herhangi bir ses kanalındaysa işlem yapma
+                if not client.voice_clients:
+                    print(f"Sese baglaniliyor: {channel.name}")
                     await channel.connect(self_deaf=True, self_mute=True)
+                else:
+                    vc = client.voice_clients[0]
+                    if vc.channel.id != CHANNEL_ID:
+                        print("Farkli kanalda, hedefe tasiniyor...")
+                        await vc.move_to(channel)
             else:
-                print("HATA: CHANNEL_ID bulunamadı veya yan hesabın kanala erişim yetkisi yok!")
+                print("HATA: CHANNEL_ID bulunamadi veya kanala erişim yetkisi yok!")
         except Exception as e:
-            print(f"Ses bağlantı hatası: {e}")
-        await asyncio.sleep(30)  # 30 saniyede bir kontrol et
+            print(f"Ses baglanti hatasi: {e}")
+            
+        await asyncio.sleep(20)
 
-@bot.event
+@client.event
 async def on_ready():
-    print(f"Giriş yapıldı: {bot.user}")
-    bot.loop.create_task(maintain_voice_connection())
+    client.loop.create_task(voice_loop())
 
 if __name__ == "__main__":
     keep_alive()
     start_self_ping()
-    bot.run(TOKEN, reconnect=True)
+    client.run(TOKEN, reconnect=True)
