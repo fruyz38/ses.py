@@ -6,21 +6,43 @@ import requests
 from flask import Flask
 from threading import Thread
 
-# Discord'un ayrıntılı loglarını görmek için
+# Log seviyesini ayarla
 logging.basicConfig(level=logging.INFO)
 
 import discord
 import discord.state
 import discord.settings
+import discord.utils
 
-# --- GATWAY READY/SUPPLEMENTAL ÇÖKMESİNİ ENGELEYEN KRİTİK YAMA ---
+# --- 1. BUILD NUMBER & BROWSER VERSION YAMASI (KİLİT NOKTA) ---
+# Render IP'sinden versiyon çekilemediği için sabit değerler tanımlıyoruz
+async def fake_build_number(*args, **kwargs):
+    return 315682
+
+async def fake_browser_version(*args, **kwargs):
+    return "128.0.0.0"
+
+def fake_sync_build_number(*args, **kwargs):
+    return 315682
+
+def fake_sync_browser_version(*args, **kwargs):
+    return "128.0.0.0"
+
+# Kütüphanenin çöken utils fonksiyonlarını eziyoruz
+discord.utils.get_build_number = fake_build_number
+discord.utils.get_browser_version = fake_browser_version
+if hasattr(discord.utils, '_get_build_number'):
+    discord.utils._get_build_number = fake_sync_build_number
+if hasattr(discord.utils, '_get_browser_version'):
+    discord.utils._get_browser_version = fake_sync_browser_version
+
+# --- 2. GATEWAY READY/SUPPLEMENTAL ÇÖKMESİNİ ENGELEYEN YAMA ---
 async def dummy_parse_ready_supp(self, data):
     pass
 
 def noop_parse_ready_supp(self, data):
     pass
 
-# Kütüphanenin çökmesine yol açan hazır paket ayrıştırmalarını tamamen devre dışı bırakıyoruz
 discord.state.ConnectionState.parse_ready_supplemental = noop_parse_ready_supp
 discord.state.ConnectionState._parse_ready_supplemental = dummy_parse_ready_supp
 
@@ -33,18 +55,18 @@ def safe_settings_init(self, data, state):
 discord.settings.Settings.__init__ = safe_settings_init
 # -----------------------------------------------------------------
 
-# 1. Web Sunucusu (Render'ın Port Kapanma Hatasını Önler)
+# 3. Web Sunucusu (Render Port Kapanmasını Önler)
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot ve Web Sunucusu Aktif!"
+    return "Bot Aktif!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-# 2. Self-Ping (Render Uykusunu Engeller)
+# 4. Self-Ping (Render Uykusunu Engeller)
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -55,7 +77,7 @@ def self_ping_loop():
             except Exception:
                 pass
 
-# 3. Discord Self-Bot Mantığı
+# 5. Discord Self-Bot Mantığı
 TOKEN = os.environ.get("TOKEN")
 CHANNEL_ID_RAW = os.environ.get("CHANNEL_ID", "0")
 
@@ -66,7 +88,7 @@ except ValueError:
 
 client = discord.Client(self_bot=True)
 
-# Mesaj dinlemeyi tamamen kapatıyoruz ki çökme olmasın
+# Mesaj dinlemeyi kapat
 async def on_message(message):
     pass
 client.on_message = on_message
@@ -105,18 +127,16 @@ async def on_ready():
 if __name__ == "__main__":
     print("=== SİSTEM BAŞLATILIYOR ===", flush=True)
     
-    # Flask sunucusunu arka planda çalıştır
     t_flask = Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
 
-    # Self-ping arka planda çalıştır
     t_ping = Thread(target=self_ping_loop)
     t_ping.daemon = True
     t_ping.start()
 
     if not TOKEN:
-        print("KRİTİK HATA: Render Environment Variables kısmında TOKEN bulunamadı!", flush=True)
+        print("KRİTİK HATA: Render vars kısmında TOKEN bulunamadı!", flush=True)
     else:
         print("Token okundu, Discord'a baglanilmaya calisiliyor...", flush=True)
         client.run(TOKEN, reconnect=True)
