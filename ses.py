@@ -5,16 +5,25 @@ import requests
 from flask import Flask
 from threading import Thread
 
-# Discord yaması (READY paketindeki hatayı engeller)
+# --- DISCORD READY/SETTINGS SIFIRLAMA YAMASI ---
 import discord.state
-old_parse_ready_supp = discord.state.ConnectionState.parse_ready_supplemental
+import discord.settings
 
-def patched_parse_ready_supplemental(self, data):
-    if isinstance(data, dict):
-        data.pop('user_settings', None)
-    return old_parse_ready_supp(self, data)
+# Discord'un bozuk user_settings paketini tamamen ezip geçiyoruz
+def noop_parse_ready_supp(self, data):
+    pass
 
-discord.state.ConnectionState.parse_ready_supplemental = patched_parse_ready_supplemental
+discord.state.ConnectionState.parse_ready_supplemental = noop_parse_ready_supp
+
+# Settings init hatasını tamamen bypass et
+old_settings_init = discord.settings.Settings.__init__
+def safe_settings_init(self, data, state):
+    if not isinstance(data, dict):
+        data = {}
+    old_settings_init(self, data, state)
+
+discord.settings.Settings.__init__ = safe_settings_init
+# -----------------------------------------------
 
 import discord
 from discord.ext import commands
