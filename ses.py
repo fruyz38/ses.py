@@ -9,7 +9,7 @@ from threading import Thread
 import discord.state
 import discord.settings
 
-# Discord'un bozuk user_settings paketini tamamen ezip geçiyoruz
+# Discord'un bozuk user_settings paketini bypass ediyoruz
 def noop_parse_ready_supp(self, data):
     pass
 
@@ -28,7 +28,7 @@ discord.settings.Settings.__init__ = safe_settings_init
 import discord
 from discord.ext import commands
 
-# 1. Web Sunucusu
+# 1. Web Sunucusu (Render'ın uyanık kalması için)
 app = Flask('')
 
 @app.route('/')
@@ -44,7 +44,7 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# 2. Self-Ping
+# 2. Self-Ping (Render uykusunu engeller)
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -72,17 +72,18 @@ async def maintain_voice_connection():
         try:
             channel = bot.get_channel(CHANNEL_ID)
             if channel:
-                voice_client = channel.guild.voice_client
-                if voice_client is None or not voice_client.is_connected():
-                    if voice_client:
-                        await voice_client.disconnect(force=True)
-                    await channel.connect(self_deaf=True, self_mute=True)
+                # Zaten ses kanalındaysa dokunma, başka kanaldaysa taşı, seste değilse bağlan
+                if bot.voice_clients:
+                    vc = bot.voice_clients[0]
+                    if vc.channel.id != CHANNEL_ID:
+                        await vc.move_to(channel)
                 else:
-                    if voice_client.channel.id != channel.id:
-                        await voice_client.move_to(channel)
+                    await channel.connect(self_deaf=True, self_mute=True)
+            else:
+                print("HATA: CHANNEL_ID bulunamadı veya yan hesabın kanala erişim yetkisi yok!")
         except Exception as e:
-            print(f"Hata: {e}")
-        await asyncio.sleep(15)
+            print(f"Ses bağlantı hatası: {e}")
+        await asyncio.sleep(30)  # 30 saniyede bir kontrol et
 
 @bot.event
 async def on_ready():
