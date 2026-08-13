@@ -4,10 +4,22 @@ import asyncio
 import requests
 from flask import Flask
 from threading import Thread
+
+# Discord yaması (READY paketindeki hatayı engeller)
+import discord.state
+old_parse_ready_supp = discord.state.ConnectionState.parse_ready_supplemental
+
+def patched_parse_ready_supplemental(self, data):
+    if isinstance(data, dict):
+        data.pop('user_settings', None)
+    return old_parse_ready_supp(self, data)
+
+discord.state.ConnectionState.parse_ready_supplemental = patched_parse_ready_supplemental
+
 import discord
 from discord.ext import commands
 
-# 1. Web Sunucusu (Render uyumasın diye)
+# 1. Web Sunucusu
 app = Flask('')
 
 @app.route('/')
@@ -23,7 +35,7 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# 2. Kendi kendine ping atma mekanizması
+# 2. Self-Ping
 def self_ping_loop():
     url = os.environ.get("RENDER_EXTERNAL_URL")
     if url:
@@ -39,7 +51,7 @@ def start_self_ping():
     t.daemon = True
     t.start()
 
-# 3. AYARLAR (Bilgileri Render'dan güvenli bir şekilde çeker)
+# 3. Ayarlar ve Bağlantı
 TOKEN = os.environ.get("TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
 
